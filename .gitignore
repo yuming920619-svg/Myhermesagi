@@ -1,0 +1,25 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# Secrets / env
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local credentials
+.git-credentials
