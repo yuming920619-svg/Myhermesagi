@@ -1,0 +1,3 @@
+In this WSL environment, /usr/bin/node exists but npm initially resolved to Windows (/mnt/c/Program Files/nodejs/npm), causing npm install failures on Linux paths. Installing nvm and using the Linux-managed Node/npm toolchain fixes Hermes agent-browser installs/audits.
+§
+In this Ubuntu 24.04 WSL environment, Playwright Chromium lacked libnspr4/libnss3/libasound at runtime. A working no-sudo fix was: apt download libnspr4 libnss3 libasound2t64, extract under ~/.hermes/local-libs/root, then patch Playwright chrome and chrome-headless-shell binaries with patchelf --force-rpath to ~/.hermes/local-libs/root/usr/lib/x86_64-linux-gnu.

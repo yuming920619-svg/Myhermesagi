@@ -9,7 +9,9 @@
 同步範圍
 - 預設只同步這個 git repo 目錄中的檔案。
 - 不要自動把整個 home 目錄、整個 ~/.hermes、或其他未明確指定的資料夾複製進來。
-- 若未來要保存 Hermes 的上下文檔（例如 SOUL.md、USER.md、MEMORY.md），應先由使用者明確要求，再以匯出副本的方式放進 repo 的子目錄，例如 `hermes-context/`。
+- 目前已採用 `hermes-context/` 目錄保存 Hermes 上下文檔的匯出副本。
+- `hermes-context/` 內的 `SOUL.md`、`USER.md`、`MEMORY.md` 視為快照檔，由自動同步工作在提交前刷新。
+- 若未來要保存其他 Hermes 上下文檔，也應由使用者明確要求，再以匯出副本方式放進適當子目錄。
 
 安全規則
 - 這個 repo 目前是公開倉庫；預設以公開倉庫標準處理所有內容。
