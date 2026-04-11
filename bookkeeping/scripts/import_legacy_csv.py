@@ -52,6 +52,26 @@ def load_existing_keys() -> set[tuple[str, str, str, str, str, str, str]]:
     return keys
 
 
+def load_existing_rows() -> list[dict[str, str]]:
+    ensure_ledger()
+    rows: list[dict[str, str]] = []
+    with LEDGER_PATH.open("r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            rows.append(
+                {
+                    "date": row.get("date", "").strip(),
+                    "item": row.get("item", "").strip(),
+                    "amount": normalize_amount(row.get("amount", "0")),
+                    "currency": row.get("currency", CURRENCY).strip() or CURRENCY,
+                    "category": row.get("category", "未分類").strip() or "未分類",
+                    "note": row.get("note", "").strip(),
+                    "created_at": row.get("created_at", "").strip(),
+                }
+            )
+    return rows
+
+
 def source_to_row(row: dict[str, str]) -> dict[str, str]:
     d = row.get("date", "").strip()
     t = row.get("time", "").strip() or "00:00"
@@ -83,31 +103,45 @@ def row_key(row: dict[str, str]) -> tuple[str, str, str, str, str, str, str]:
     )
 
 
+def row_sort_key(row: dict[str, str]) -> tuple[str, str, str]:
+    return (row["date"], row["created_at"], row["item"])
+
+
+def write_rows(rows: Iterable[dict[str, str]]) -> None:
+    ensure_ledger()
+    with LEDGER_PATH.open("w", encoding="utf-8", newline="") as out:
+        writer = csv.DictWriter(out, fieldnames=LEDGER_FIELDS)
+        writer.writeheader()
+        for row in sorted(rows, key=row_sort_key):
+            writer.writerow(row)
+
+
 def import_files(paths: Iterable[Path]) -> tuple[int, int]:
     existing = load_existing_keys()
+    all_rows = load_existing_rows()
     imported = 0
     skipped = 0
 
-    with LEDGER_PATH.open("a", encoding="utf-8", newline="") as out:
-        writer = csv.DictWriter(out, fieldnames=LEDGER_FIELDS)
-        for path in paths:
-            with path.open("r", encoding="utf-8", newline="") as f:
-                reader = csv.DictReader(f)
-                missing = [field for field in SOURCE_FIELDS if field not in (reader.fieldnames or [])]
-                if missing:
-                    raise SystemExit(f"來源檔缺少欄位 {missing}: {path}")
-                for raw in reader:
-                    row = source_to_row(raw)
-                    if not row["date"] or not row["item"]:
-                        skipped += 1
-                        continue
-                    key = row_key(row)
-                    if key in existing:
-                        skipped += 1
-                        continue
-                    writer.writerow(row)
-                    existing.add(key)
-                    imported += 1
+    for path in paths:
+        with path.open("r", encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
+            missing = [field for field in SOURCE_FIELDS if field not in (reader.fieldnames or [])]
+            if missing:
+                raise SystemExit(f"來源檔缺少欄位 {missing}: {path}")
+            for raw in reader:
+                row = source_to_row(raw)
+                if not row["date"] or not row["item"]:
+                    skipped += 1
+                    continue
+                key = row_key(row)
+                if key in existing:
+                    skipped += 1
+                    continue
+                all_rows.append(row)
+                existing.add(key)
+                imported += 1
+
+    write_rows(all_rows)
     return imported, skipped
 
 

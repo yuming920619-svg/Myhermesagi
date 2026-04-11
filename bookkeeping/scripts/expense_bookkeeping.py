@@ -83,21 +83,34 @@ def load_entries() -> list[Entry]:
     return entries
 
 
-def save_entry(entry: Entry) -> None:
+def entry_sort_key(entry: Entry) -> tuple[date, str, str]:
+    return (entry.date, entry.created_at, entry.item)
+
+
+def save_entries(entries: Iterable[Entry]) -> None:
     ensure_files()
-    with LEDGER_PATH.open("a", encoding="utf-8", newline="") as f:
+    sorted_entries = sorted(entries, key=entry_sort_key)
+    with LEDGER_PATH.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-        writer.writerow(
-            {
-                "date": entry.date.isoformat(),
-                "item": entry.item,
-                "amount": normalize_amount(entry.amount),
-                "currency": entry.currency,
-                "category": entry.category,
-                "note": entry.note,
-                "created_at": entry.created_at,
-            }
-        )
+        writer.writeheader()
+        for entry in sorted_entries:
+            writer.writerow(
+                {
+                    "date": entry.date.isoformat(),
+                    "item": entry.item,
+                    "amount": normalize_amount(entry.amount),
+                    "currency": entry.currency,
+                    "category": entry.category,
+                    "note": entry.note,
+                    "created_at": entry.created_at,
+                }
+            )
+
+
+def save_entry(entry: Entry) -> None:
+    entries = load_entries()
+    entries.append(entry)
+    save_entries(entries)
 
 
 def iso_week_key(d: date) -> tuple[int, int]:
@@ -272,6 +285,7 @@ def cmd_add(args: argparse.Namespace) -> int:
 
 def cmd_refresh(args: argparse.Namespace) -> int:
     entries = load_entries()
+    save_entries(entries)
     write_summary(entries)
     print(f"已刷新摘要：{SUMMARY_PATH}")
     print(f"目前筆數：{len(entries)}")
