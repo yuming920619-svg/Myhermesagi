@@ -155,6 +155,13 @@ def category_totals(entries: Iterable[Entry]) -> dict[str, Decimal]:
     return totals
 
 
+def format_percent(part: Decimal, whole: Decimal) -> str:
+    if whole == 0:
+        return "0%"
+    ratio = ((part / whole) * Decimal("100")).quantize(TWOPLACES, rounding=ROUND_HALF_UP)
+    return f"{normalize_amount(ratio)}%"
+
+
 def render_table(headers: list[str], rows: list[list[str]]) -> list[str]:
     line1 = "| " + " | ".join(headers) + " |"
     line2 = "| " + " | ".join(["---"] * len(headers)) + " |"
@@ -162,6 +169,18 @@ def render_table(headers: list[str], rows: list[list[str]]) -> list[str]:
     for row in rows:
         lines.append("| " + " | ".join(row) + " |")
     return lines
+
+
+def render_category_breakdown(entries: list[Entry]) -> list[str]:
+    total = sum_amount(entries)
+    totals = category_totals(entries)
+    if not totals:
+        return ["尚無任何分類花費。"]
+
+    rows = []
+    for category, amount in sorted(totals.items(), key=lambda kv: (-kv[1], kv[0])):
+        rows.append([category, normalize_amount(amount), format_percent(amount, total)])
+    return render_table(["分類", "總花費(TWD)", "占比"], rows)
 
 
 def write_summary(entries: list[Entry], today: date | None = None) -> None:
@@ -179,12 +198,17 @@ def write_summary(entries: list[Entry], today: date | None = None) -> None:
 
     monthly_totals: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal("0"))
     weekly_totals: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal("0"))
-    current_week_categories = category_totals(week_entries)
-    current_month_categories = category_totals(month_entries)
 
     for entry in sorted_entries:
         monthly_totals[(entry.date.year, entry.date.month)] += entry.amount
         weekly_totals[iso_week_key(entry.date)] += entry.amount
+
+    recent_three_weeks: list[tuple[tuple[int, int], list[Entry]]] = []
+    for weeks_ago in range(3):
+        ref_day = today - timedelta(weeks=weeks_ago)
+        week_key = iso_week_key(ref_day)
+        week_group = [e for e in sorted_entries if iso_week_key(e.date) == week_key]
+        recent_three_weeks.append((week_key, week_group))
 
     lines: list[str] = []
     lines.append("# 記帳總覽")
@@ -236,26 +260,23 @@ def write_summary(entries: list[Entry], today: date | None = None) -> None:
         lines.append("目前沒有任何月統計。")
     lines.append("")
 
-    lines.append("## 本週分類統計")
+    lines.append("## 最近三週分類統計")
     lines.append("")
-    if current_week_categories:
-        rows = []
-        for category, total in sorted(current_week_categories.items(), key=lambda kv: (-kv[1], kv[0])):
-            rows.append([category, normalize_amount(total)])
-        lines.extend(render_table(["分類", "總花費(TWD)"], rows))
-    else:
-        lines.append("本週尚無任何分類花費。")
-    lines.append("")
+    for week_key, week_group in recent_three_weeks:
+        year, week = week_key
+        start, end = week_bounds(year, week)
+        lines.append(f"### {year}-W{week:02d}（{start.isoformat()} ~ {end.isoformat()}）")
+        lines.append("")
+        lines.append(f"- 週總花費：{format_money(sum_amount(week_group))}")
+        lines.append("")
+        lines.extend(render_category_breakdown(week_group))
+        lines.append("")
 
     lines.append("## 本月分類統計")
     lines.append("")
-    if current_month_categories:
-        rows = []
-        for category, total in sorted(current_month_categories.items(), key=lambda kv: (-kv[1], kv[0])):
-            rows.append([category, normalize_amount(total)])
-        lines.extend(render_table(["分類", "總花費(TWD)"], rows))
-    else:
-        lines.append("本月尚無任何分類花費。")
+    lines.append(f"- 月總花費：{format_money(sum_amount(month_entries))}")
+    lines.append("")
+    lines.extend(render_category_breakdown(month_entries))
     lines.append("")
 
     SUMMARY_PATH.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
