@@ -4,7 +4,7 @@
 
 檔案說明：
 - `ledger.csv`：原始記帳資料
-- `SUMMARY.md`：自動產生的總覽，包含本週、本月、最近 12 週、最近 12 個月與本月分類統計
+- `SUMMARY.md`：自動產生的總覽，包含本週、本月、最近 12 週、最近 12 個月，以及本週/本月分類統計
 - `scripts/expense_bookkeeping.py`：新增記帳與刷新摘要的腳本
 - `scripts/import_legacy_csv.py`：把舊版月記帳 CSV 合併匯入目前 ledger 的工具（會去重）
 

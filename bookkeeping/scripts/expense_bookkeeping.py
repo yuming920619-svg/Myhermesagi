@@ -148,6 +148,13 @@ def sum_amount(entries: Iterable[Entry]) -> Decimal:
     return total.quantize(TWOPLACES, rounding=ROUND_HALF_UP)
 
 
+def category_totals(entries: Iterable[Entry]) -> dict[str, Decimal]:
+    totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    for entry in entries:
+        totals[entry.category] += entry.amount
+    return totals
+
+
 def render_table(headers: list[str], rows: list[list[str]]) -> list[str]:
     line1 = "| " + " | ".join(headers) + " |"
     line2 = "| " + " | ".join(["---"] * len(headers)) + " |"
@@ -172,13 +179,12 @@ def write_summary(entries: list[Entry], today: date | None = None) -> None:
 
     monthly_totals: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal("0"))
     weekly_totals: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal("0"))
-    current_month_categories: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    current_week_categories = category_totals(week_entries)
+    current_month_categories = category_totals(month_entries)
 
     for entry in sorted_entries:
         monthly_totals[(entry.date.year, entry.date.month)] += entry.amount
         weekly_totals[iso_week_key(entry.date)] += entry.amount
-        if (entry.date.year, entry.date.month) == current_month:
-            current_month_categories[entry.category] += entry.amount
 
     lines: list[str] = []
     lines.append("# 記帳總覽")
@@ -228,6 +234,17 @@ def write_summary(entries: list[Entry], today: date | None = None) -> None:
         lines.extend(render_table(["月份", "總花費(TWD)"], rows))
     else:
         lines.append("目前沒有任何月統計。")
+    lines.append("")
+
+    lines.append("## 本週分類統計")
+    lines.append("")
+    if current_week_categories:
+        rows = []
+        for category, total in sorted(current_week_categories.items(), key=lambda kv: (-kv[1], kv[0])):
+            rows.append([category, normalize_amount(total)])
+        lines.extend(render_table(["分類", "總花費(TWD)"], rows))
+    else:
+        lines.append("本週尚無任何分類花費。")
     lines.append("")
 
     lines.append("## 本月分類統計")
