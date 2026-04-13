@@ -162,6 +162,30 @@ def format_percent(part: Decimal, whole: Decimal) -> str:
     return f"{normalize_amount(ratio)}%"
 
 
+def format_signed_amount(value: Decimal) -> str:
+    normalized = normalize_amount(abs(value))
+    if value > 0:
+        return f"+{normalized}"
+    if value < 0:
+        return f"-{normalized}"
+    return normalized
+
+
+def format_change_rate(current: Decimal, previous: Decimal) -> str:
+    if previous == 0:
+        return "新增" if current > 0 else "0%"
+    delta = (((current - previous) / previous) * Decimal("100")).quantize(TWOPLACES, rounding=ROUND_HALF_UP)
+    if delta > 0:
+        return f"+{normalize_amount(delta)}%"
+    return f"{normalize_amount(delta)}%"
+
+
+def previous_month_key(year: int, month: int) -> tuple[int, int]:
+    if month == 1:
+        return (year - 1, 12)
+    return (year, month - 1)
+
+
 def render_table(headers: list[str], rows: list[list[str]]) -> list[str]:
     line1 = "| " + " | ".join(headers) + " |"
     line2 = "| " + " | ".join(["---"] * len(headers)) + " |"
@@ -183,6 +207,31 @@ def render_category_breakdown(entries: list[Entry]) -> list[str]:
     return render_table(["分類", "總花費(TWD)", "占比"], rows)
 
 
+def render_month_category_trend(current_entries: list[Entry], previous_entries: list[Entry], current_label: str, previous_label: str) -> list[str]:
+    current_totals = category_totals(current_entries)
+    previous_totals = category_totals(previous_entries)
+    categories = sorted(
+        set(current_totals) | set(previous_totals),
+        key=lambda category: (-current_totals.get(category, Decimal("0")), -previous_totals.get(category, Decimal("0")), category),
+    )
+    if not categories:
+        return ["本月與上月都尚無任何分類花費。"]
+
+    rows = []
+    for category in categories:
+        current_amount = current_totals.get(category, Decimal("0"))
+        previous_amount = previous_totals.get(category, Decimal("0"))
+        diff = (current_amount - previous_amount).quantize(TWOPLACES, rounding=ROUND_HALF_UP)
+        rows.append([
+            category,
+            normalize_amount(current_amount),
+            normalize_amount(previous_amount),
+            format_signed_amount(diff),
+            format_change_rate(current_amount, previous_amount),
+        ])
+    return render_table(["分類", f"{current_label}(TWD)", f"{previous_label}(TWD)", "差額(TWD)", "變化率"], rows)
+
+
 def write_summary(entries: list[Entry], today: date | None = None) -> None:
     ensure_files()
     today = today or date.today()
@@ -192,9 +241,11 @@ def write_summary(entries: list[Entry], today: date | None = None) -> None:
     all_total = sum_amount(sorted_entries)
     current_week = iso_week_key(today)
     current_month = (today.year, today.month)
+    previous_month = previous_month_key(today.year, today.month)
 
     week_entries = [e for e in sorted_entries if iso_week_key(e.date) == current_week]
     month_entries = [e for e in sorted_entries if (e.date.year, e.date.month) == current_month]
+    previous_month_entries = [e for e in sorted_entries if (e.date.year, e.date.month) == previous_month]
 
     monthly_totals: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal("0"))
     weekly_totals: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal("0"))
@@ -277,6 +328,16 @@ def write_summary(entries: list[Entry], today: date | None = None) -> None:
     lines.append(f"- 月總花費：{format_money(sum_amount(month_entries))}")
     lines.append("")
     lines.extend(render_category_breakdown(month_entries))
+    lines.append("")
+
+    current_month_label = f"{current_month[0]}-{current_month[1]:02d}"
+    previous_month_label = f"{previous_month[0]}-{previous_month[1]:02d}"
+    lines.append("## 本月 vs 上月分類變化")
+    lines.append("")
+    lines.append(f"- 本月：{current_month_label}")
+    lines.append(f"- 上月：{previous_month_label}")
+    lines.append("")
+    lines.extend(render_month_category_trend(month_entries, previous_month_entries, current_month_label, previous_month_label))
     lines.append("")
 
     SUMMARY_PATH.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
